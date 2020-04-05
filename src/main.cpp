@@ -13,9 +13,9 @@ bool settled = false;
 unsigned long lastRepPeriod = 0xffff;
 
 // enable single/double/quad measurements
-#define CT1
-//#define CT2
-//#define CT3CT4
+#define CT_SINGLE  // CT1 connected
+//#define CT_DUAL    // CT1&CT2 connected
+//#define CT_QUAD    // CT1-CT4 connected
 
 // enable this if you have Vref (AC-AC adapter) to calculate actual voltage
 #define HAS_VREF
@@ -41,16 +41,15 @@ unsigned long lastRepPeriod = 0xffff;
 #define NODEFUNC_POWER_QUAD     3
 
 // create energy monitor object(s)
-#ifdef CT1
-  EnergyMonitor emon1;
-#endif
-#ifdef CT2
+#ifdef CT_QUAD
   EnergyMonitor emon2;
-#endif
-#ifdef CT3CT4
   EnergyMonitor emon3;
   EnergyMonitor emon4;
+#elif defined(CT_DUAL)
+  EnergyMonitor emon2;
 #endif
+// we assume that at least CT_SINGLE is defined
+EnergyMonitor emon1;
 
 // create radio object
 #ifdef ENABLE_ATC
@@ -60,33 +59,35 @@ unsigned long lastRepPeriod = 0xffff;
 #endif
 
 // data to send
-typedef struct {
-  uint16_t  nodeId;
-  uint8_t   nodeFunction;
-  uint16_t  power1;
-  uint16_t  Vrms;
-} __attribute__((packed)) PayloadPowerSingle;
-PayloadPowerSingle payloadPowerSingle;
-
-typedef struct {
-  uint16_t  nodeId;
-  uint8_t   nodeFunction;
-  uint16_t  power1;
-  uint16_t  power2;
-  uint16_t  Vrms;
-} __attribute__((packed)) PayloadPowerDouble;
-PayloadPowerDouble payloadPowerDouble;
-
-typedef struct {
-  uint16_t  nodeId;
-  uint8_t   nodeFunction;
-  uint16_t  power1;
-  uint16_t  power2;
-  uint16_t  power3;
-  uint16_t  power4;
-  uint16_t  Vrms;
-} __attribute__((packed)) PayloadPowerQuad;
-PayloadPowerQuad payloadPowerQuad;
+#ifdef CT_QUAD
+  typedef struct {
+    uint16_t  nodeId;
+    uint8_t   nodeFunction;
+    uint16_t  power1;
+    uint16_t  power2;
+    uint16_t  power3;
+    uint16_t  power4;
+    uint16_t  Vrms;
+  } __attribute__((packed)) PayloadPowerQuad;
+  PayloadPowerQuad payloadPowerQuad;
+#elif defined(CT_DUAL)
+  typedef struct {
+    uint16_t  nodeId;
+    uint8_t   nodeFunction;
+    uint16_t  power1;
+    uint16_t  power2;
+    uint16_t  Vrms;
+  } __attribute__((packed)) PayloadPowerDouble;
+  PayloadPowerDouble payloadPowerDouble;
+#else
+  typedef struct {
+    uint16_t  nodeId;
+    uint8_t   nodeFunction;
+    uint16_t  power1;
+    uint16_t  Vrms;
+  } __attribute__((packed)) PayloadPowerSingle;
+  PayloadPowerSingle payloadPowerSingle;
+#endif
 
 void setup() {
   // fire up the serial port
@@ -95,27 +96,25 @@ void setup() {
   Serial.println("[SYS ] emonTx-shield-RFM69 starting up");
 
   // set up energy monitor(s) for power and voltage monitoring
-  #ifdef CT1
-    emon1.current(1, 60.606);
+  #ifdef CT_QUAD
+    emon2.current(1, 60.606);
+    emon3.current(1, 60.606);
+    emon4.current(1, 60.606);
     #ifdef HAS_VREF
-      emon1.voltage(0, 256, 1.7);
+      emon2.voltage(0, 256, 1.7);
+      emon3.voltage(0, 256, 1.7);
+      emon4.voltage(0, 256, 1.7);
     #endif
-  #endif
-
-  #ifdef CT2
+  #elif defined(CT_DUAL)
     emon2.current(1, 60.606);
     #ifdef HAS_VREF
       emon2.voltage(0, 256, 1.7);
     #endif
   #endif
-
-  #ifdef CT3CT4
-    emon3.current(1, 60.606);
-    emon4.current(1, 60.606);
-    #ifdef HAS_VREF
-      emon3.voltage(0, 256, 1.7);
-      emon4.voltage(0, 256, 1.7);
-    #endif
+  // we assume that at least CT_SINGLE is defined
+  emon1.current(1, 60.606);
+  #ifdef HAS_VREF
+    emon1.voltage(0, 256, 1.7);
   #endif
 
   // initialise radio
@@ -163,37 +162,16 @@ void loop() {
   if (curRepPeriod != lastRepPeriod) {
     // update the last report period
     lastRepPeriod = curRepPeriod;
-    // measure power and voltage
-    #ifdef CT1
-      #ifdef HAS_VREF
-        emon1.calcVI(20, 2000);
-        Serial.print("[CT1 ] Power: ");
-        Serial.print(emon1.realPower);
-        Serial.print("W , VRms: ");
-        Serial.println(emon1.Vrms);
-      #else
-        emon1.calcIrms(1480);
-        Serial.print("CT1 ] Power: ");
-        Serial.print(emon1.Irms * MAINS_VOLTAGE);
-      #endif
-    #endif
 
-    #ifdef CT2
+    // measure power and voltage
+    #ifdef CT_QUAD
       #ifdef HAS_VREF
         emon2.calcVI(20, 2000);
         Serial.print("[CT2 ] Power: ");
         Serial.print(emon2.realPower);
         Serial.print("W , VRms: ");
         Serial.println(emon2.Vrms);
-      #else
-        emon2.calcIrms(1480);
-        Serial.print("CT2 ] Power: ");
-        Serial.print(emon2.Irms * MAINS_VOLTAGE);
-      #endif
-    #endif
 
-    #ifdef CT3CT4
-      #ifdef HAS_VREF
         emon3.calcVI(20, 2000);
         Serial.print("[CT3 ] Power: ");
         Serial.print(emon3.realPower);
@@ -206,20 +184,49 @@ void loop() {
         Serial.print("W , VRms: ");
         Serial.println(emon4.Vrms);
       #else
+        emon2.calcIrms(1480);
+        Serial.print("[CT2 ] Power: ");
+        Serial.print(emon2.Irms * MAINS_VOLTAGE);
+
         emon3.calcIrms(1480);
-        Serial.print("CT3 ] Power: ");
+        Serial.print("[CT3 ] Power: ");
         Serial.print(emon3.Irms * MAINS_VOLTAGE);
 
         emon4.calcIrms(1480);
-        Serial.print("CT4 ] Power: ");
+        Serial.print("[CT4 ] Power: ");
         Serial.print(emon4.Irms * MAINS_VOLTAGE);
       #endif
+    #elif defined(CT_DUAL)
+      #ifdef HAS_VREF
+        emon2.calcVI(20, 2000);
+        Serial.print("[CT2 ] Power: ");
+        Serial.print(emon2.realPower);
+        Serial.print("W , VRms: ");
+        Serial.println(emon2.Vrms);
+      #else
+        emon2.calcIrms(1480);
+        Serial.print("[CT2 ] Power: ");
+        Serial.print(emon2.Irms * MAINS_VOLTAGE);
+      #endif
+    #endif
+
+    // CT1 is always active
+    #ifdef HAS_VREF
+      emon1.calcVI(20, 2000);
+      Serial.print("[CT1 ] Power: ");
+      Serial.print(emon1.realPower);
+      Serial.print("W , VRms: ");
+      Serial.println(emon1.Vrms);
+    #else
+      emon1.calcIrms(1480);
+      Serial.print("[CT1 ] Power: ");
+      Serial.print(emon1.Irms * MAINS_VOLTAGE);
     #endif
 
     // now send the data over radio
     if (settled) {
       // prep data for sending
-      #ifdef CT3CT4
+      #ifdef CT_QUAD
         payloadPowerQuad.nodeId = NODEID;
         payloadPowerQuad.nodeFunction = NODEFUNC_POWER_QUAD;
         #ifdef HAS_VREF
@@ -235,7 +242,7 @@ void loop() {
           payloadPowerQuad.power3 = emon3.Irms * MAINS_VOLTAGE;
           payloadPowerQuad.power4 = emon4.Irms * MAINS_VOLTAGE;
         #endif
-      #elif defined(CT2)
+      #elif defined(CT_DUAL)
         payloadPowerDouble.nodeId = NODEID;
         payloadPowerDouble.nodeFunction = NODEFUNC_POWER_DOUBLE;
         #ifdef HAS_VREF
@@ -261,9 +268,9 @@ void loop() {
 
       // now send the data
       Serial.print("[RF69] Sending data - ");
-      #ifdef CT3CT4
+      #ifdef CT_QUAD
         if (radio.sendWithRetry(GATEWAYID, (const void*)(&payloadPowerQuad), sizeof(payloadPowerQuad))) {
-      #elif defined(CT2)
+      #elif defined(CT_DUAL)
         if (radio.sendWithRetry(GATEWAYID, (const void*)(&payloadPowerDouble), sizeof(payloadPowerDouble))) {
       #else
         if (radio.sendWithRetry(GATEWAYID, (const void*)(&payloadPowerSingle), sizeof(payloadPowerSingle))) {
