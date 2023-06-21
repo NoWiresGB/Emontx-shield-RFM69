@@ -13,9 +13,9 @@ bool settled = false;
 unsigned long lastRepPeriod = 0xffff;
 
 // enable single/double/quad measurements
-#define CT_SINGLE  // CT1 connected
+//#define CT_SINGLE  // CT1 connected
 //#define CT_DUAL    // CT1&CT2 connected
-//#define CT_QUAD    // CT1-CT4 connected
+#define CT_QUAD    // CT1-CT4 connected
 
 // enable this if you have Vref (AC-AC adapter) to calculate actual voltage
 #define HAS_VREF
@@ -97,16 +97,16 @@ void setup() {
 
   // set up energy monitor(s) for power and voltage monitoring
   #ifdef CT_QUAD
-    emon2.current(1, 60.606);
-    emon3.current(1, 60.606);
-    emon4.current(1, 60.606);
+    emon2.current(2, 60.606);
+    emon3.current(3, 60.606);
+    emon4.current(4, 18.806);   // this is a 30A clamp (1860 windings) with the burden resistor swapped from 33ohm to 100ohm
     #ifdef HAS_VREF
       emon2.voltage(0, 256, 1.7);
       emon3.voltage(0, 256, 1.7);
       emon4.voltage(0, 256, 1.7);
     #endif
   #elif defined(CT_DUAL)
-    emon2.current(1, 60.606);
+    emon2.current(2, 60.606);
     #ifdef HAS_VREF
       emon2.voltage(0, 256, 1.7);
     #endif
